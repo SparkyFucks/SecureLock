@@ -560,7 +560,7 @@ fun SecuritySettingsScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "SecureLock · powered by SparkyLabs",
+                    text = "SecureLock v1.1.0 · powered by SparkyLabs",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )

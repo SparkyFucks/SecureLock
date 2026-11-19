@@ -114,7 +114,7 @@ fun HomeScreen(
                             )
                         }
                         Text(
-                            text = "powered by SparkyLabs",
+                            text = "SecureLock v1.1.0 · powered by SparkyLabs",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
                             modifier = Modifier.padding(start = 32.dp)
@@ -203,7 +203,7 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "powered by SparkyLabs",
+                    text = "SecureLock v1.1.0 · powered by SparkyLabs",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 )
