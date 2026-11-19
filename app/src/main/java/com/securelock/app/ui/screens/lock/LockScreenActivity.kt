@@ -1,8 +1,6 @@
 package com.securelock.app.ui.screens.lock
 
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.addCallback
@@ -13,7 +11,6 @@ import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,20 +26,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,7 +63,6 @@ import com.securelock.app.ui.screens.setup.components.PasswordInputView
 import com.securelock.app.ui.screens.setup.components.PatternLockView
 import com.securelock.app.ui.screens.setup.components.PinInputView
 import com.securelock.app.ui.theme.SecureLockTheme
-import com.securelock.app.ui.theme.StatusError
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -108,20 +105,23 @@ class LockScreenActivity : FragmentActivity() {
                 ) {
                     LockScreenUI(
                         targetAppName = appName,
-                        targetPackage = targetPackage,
                         onUnlockSuccess = {
                             AppLockManager.markAppUnlocked(targetPackage)
                             finish()
-                            @Suppress("DEPRECATION") overridePendingTransition(0, 0)
+                            @Suppress("DEPRECATION")
+                            overridePendingTransition(0, 0)
                         },
                         onExitToHome = {
                             exitToHomeScreen()
                         },
-                        onTriggerBiometric = { promptBiometrics {
-                            AppLockManager.markAppUnlocked(targetPackage)
-                            finish()
-                            @Suppress("DEPRECATION") overridePendingTransition(0, 0)
-                        } }
+                        onTriggerBiometric = {
+                            promptBiometrics {
+                                AppLockManager.markAppUnlocked(targetPackage)
+                                finish()
+                                @Suppress("DEPRECATION")
+                                overridePendingTransition(0, 0)
+                            }
+                        }
                     )
                 }
             }
@@ -135,10 +135,9 @@ class LockScreenActivity : FragmentActivity() {
         }
         startActivity(homeIntent)
         finish()
-        @Suppress("DEPRECATION") overridePendingTransition(0, 0)
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
     }
-
-
 
     private fun promptBiometrics(onSuccess: () -> Unit) {
         val executor = ContextCompat.getMainExecutor(this)
@@ -162,7 +161,6 @@ class LockScreenActivity : FragmentActivity() {
 @Composable
 fun LockScreenUI(
     targetAppName: String,
-    targetPackage: String,
     onUnlockSuccess: () -> Unit,
     onExitToHome: () -> Unit,
     onTriggerBiometric: () -> Unit
@@ -172,13 +170,19 @@ fun LockScreenUI(
     val prefsManager = (context.applicationContext as SecureLockApp).preferencesManager
 
     var securityStatus by remember { mutableStateOf(SecurityStatus()) }
+    var securityQuestion by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var enteredPin by remember { mutableStateOf("") }
     var enteredPassword by remember { mutableStateOf("") }
 
+    var showForgotDialog by remember { mutableStateOf(false) }
+    var recoveryAnswerInput by remember { mutableStateOf("") }
+    var recoveryError by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(Unit) {
         val status = prefsManager.securityStatusFlow.first()
         securityStatus = status
+        securityQuestion = prefsManager.securityQuestionFlow.first()
 
         // Auto trigger biometrics if enabled
         if (status.isBiometricsEnabled) {
@@ -189,21 +193,99 @@ fun LockScreenUI(
         }
     }
 
+    // Forgot Password Recovery Dialog (Tweak 4)
+    if (showForgotDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showForgotDialog = false
+                recoveryAnswerInput = ""
+                recoveryError = null
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Outlined.Security,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Security Question Recovery")
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = securityQuestion ?: "Answer your security question to unlock this app:",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = recoveryAnswerInput,
+                        onValueChange = {
+                            recoveryAnswerInput = it
+                            recoveryError = null
+                        },
+                        label = { Text("Your Answer") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    recoveryError?.let { err ->
+                        Text(
+                            text = err,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        coroutineScope.launch {
+                            val valid = prefsManager.verifySecurityAnswer(recoveryAnswerInput)
+                            if (valid) {
+                                showForgotDialog = false
+                                onUnlockSuccess()
+                            } else {
+                                recoveryError = "Incorrect answer. Please try again."
+                            }
+                        }
+                    }
+                ) {
+                    Text("Verify & Unlock")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showForgotDialog = false
+                        recoveryAnswerInput = ""
+                        recoveryError = null
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 32.dp),
+            .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         // Header
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 16.dp)
+            modifier = Modifier.padding(top = 12.dp)
         ) {
             Box(
                 modifier = Modifier
-                    .size(64.dp)
+                    .size(60.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primaryContainer),
                 contentAlignment = Alignment.Center
@@ -212,11 +294,11 @@ fun LockScreenUI(
                     imageVector = Icons.Outlined.Lock,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(30.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = targetAppName,
@@ -241,7 +323,7 @@ fun LockScreenUI(
                         text = msg,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(top = 8.dp)
+                        modifier = Modifier.padding(top = 6.dp)
                     )
                 }
             }
@@ -337,7 +419,6 @@ fun LockScreenUI(
                     )
                 }
                 null -> {
-                    // Fallback
                     Button(onClick = onUnlockSuccess) {
                         Text("Unlock")
                     }
@@ -345,27 +426,57 @@ fun LockScreenUI(
             }
         }
 
-        // Bottom Controls (Biometrics + Cancel)
-        Row(
+        // Forgot Password & Action Buttons
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            OutlinedButton(onClick = onExitToHome) {
-                Text("Exit to Home")
-            }
-
-            if (securityStatus.isBiometricsEnabled) {
-                FilledTonalButton(onClick = onTriggerBiometric) {
-                    Icon(
-                        imageVector = Icons.Outlined.Fingerprint,
-                        contentDescription = "Fingerprint",
-                        modifier = Modifier.size(20.dp)
+            // Forgot Password (if security question is configured)
+            if (securityQuestion != null) {
+                TextButton(onClick = { showForgotDialog = true }) {
+                    Text(
+                        text = "Forgot Password?",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Biometric")
                 }
             }
+
+            // Bottom Controls (Exit + Biometrics)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(onClick = onExitToHome) {
+                    Text("Exit to Home")
+                }
+
+                if (securityStatus.isBiometricsEnabled) {
+                    FilledTonalButton(onClick = onTriggerBiometric) {
+                        Icon(
+                            imageVector = Icons.Outlined.Fingerprint,
+                            contentDescription = "Fingerprint",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Biometric")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Tweak 1: "powered by SparkyLabs"
+            Text(
+                text = "powered by SparkyLabs",
+                style = MaterialTheme.typography.labelSmall.copy(
+                    letterSpacing = 1.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }

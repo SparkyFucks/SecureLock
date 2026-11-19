@@ -20,19 +20,23 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BatterySaver
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Policy
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -53,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.securelock.app.SecureLockApp
 import com.securelock.app.ui.components.SecurityInfoCard
 import kotlinx.coroutines.launch
@@ -70,11 +75,27 @@ fun SecuritySettingsScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val prefsManager = (context.applicationContext as SecureLockApp).preferencesManager
+    val securityQuestion by prefsManager.securityQuestionFlow.collectAsState(initial = null)
+    val isUninstallShield by prefsManager.isUninstallShieldFlow.collectAsState(initial = false)
 
     var showVerificationDialog by remember { mutableStateOf(false) }
     var currentCredentialInput by remember { mutableStateOf("") }
     var verificationError by remember { mutableStateOf<String?>(null) }
+    var pendingAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
+    var showQuestionDialog by remember { mutableStateOf(false) }
+    val questions = listOf(
+        "What was the name of your first pet?",
+        "In what city or town were you born?",
+        "What was your childhood nickname?",
+        "What was the make of your first phone or car?",
+        "What was the name of your elementary school?"
+    )
+    var selectedQuestion by remember { mutableStateOf(questions.first()) }
+    var newAnswerInput by remember { mutableStateOf("") }
+    var questionExpanded by remember { mutableStateOf(false) }
+
+    // Re-authentication dialog
     if (showVerificationDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -86,7 +107,7 @@ fun SecuritySettingsScreen(
             text = {
                 Column {
                     Text(
-                        text = "To change your security method, please enter your current ${status.authMethod?.title ?: "credential"}:",
+                        text = "Enter your current ${status.authMethod?.title ?: "credential"} to proceed:",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -120,7 +141,8 @@ fun SecuritySettingsScreen(
                                 showVerificationDialog = false
                                 currentCredentialInput = ""
                                 verificationError = null
-                                onChangeMethodClick()
+                                pendingAction?.invoke()
+                                pendingAction = null
                             } else {
                                 verificationError = "Incorrect credential. Please try again."
                             }
@@ -136,8 +158,76 @@ fun SecuritySettingsScreen(
                         showVerificationDialog = false
                         currentCredentialInput = ""
                         verificationError = null
+                        pendingAction = null
                     }
                 ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Security Question Configuration Dialog
+    if (showQuestionDialog) {
+        AlertDialog(
+            onDismissRequest = { showQuestionDialog = false },
+            title = { Text("Update Security Question") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ExposedDropdownMenuBox(
+                        expanded = questionExpanded,
+                        onExpandedChange = { questionExpanded = !questionExpanded }
+                    ) {
+                        OutlinedTextField(
+                            value = selectedQuestion,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Question") },
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = questionExpanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = questionExpanded,
+                            onDismissRequest = { questionExpanded = false }
+                        ) {
+                            questions.forEach { q ->
+                                DropdownMenuItem(
+                                    text = { Text(q) },
+                                    onClick = {
+                                        selectedQuestion = q
+                                        questionExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = newAnswerInput,
+                        onValueChange = { newAnswerInput = it },
+                        label = { Text("Secret Answer") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newAnswerInput.trim().length >= 2) {
+                            coroutineScope.launch {
+                                prefsManager.saveSecurityQuestion(selectedQuestion, newAnswerInput)
+                                showQuestionDialog = false
+                                newAnswerInput = ""
+                            }
+                        }
+                    },
+                    enabled = newAnswerInput.trim().length >= 2
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuestionDialog = false }) {
                     Text("Cancel")
                 }
             }
@@ -171,7 +261,7 @@ fun SecuritySettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Authentication",
+                text = "Authentication & Recovery",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -182,6 +272,7 @@ fun SecuritySettingsScreen(
                     .fillMaxWidth()
                     .clickable {
                         if (status.isSetupComplete) {
+                            pendingAction = onChangeMethodClick
                             showVerificationDialog = true
                         } else {
                             onChangeMethodClick()
@@ -213,6 +304,47 @@ fun SecuritySettingsScreen(
                         )
                         Text(
                             text = "Current: ${status.authMethod?.title ?: "None"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Security Question Card (Tweak 4)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        pendingAction = { showQuestionDialog = true }
+                        showVerificationDialog = true
+                    },
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.HelpOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Security Recovery Question",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = securityQuestion ?: "Tap to set a question for password recovery",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -260,15 +392,65 @@ fun SecuritySettingsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "System Integration",
+                text = "Anti-Tamper & Protection",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
 
-            // Permissions Card
+            // Tweak 3: Uninstall & Settings Shield
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Shield,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Anti-Uninstall Shield",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = if (isUninstallShield) "Settings & App Store are protected" else "Tap switch to protect Settings",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = isUninstallShield,
+                            onCheckedChange = { enable ->
+                                coroutineScope.launch {
+                                    prefsManager.setUninstallShield(enable)
+                                }
+                            }
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Locks System Settings and Google Play Store with your master password so unauthorized users cannot access the system 'Uninstall' button or clear app data.",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            // Permissions Management Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -370,7 +552,19 @@ fun SecuritySettingsScreen(
                 icon = Icons.Outlined.WarningAmber
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Tweak 1: Branding footer
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "SecureLock · powered by SparkyLabs",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
         }
     }
 }

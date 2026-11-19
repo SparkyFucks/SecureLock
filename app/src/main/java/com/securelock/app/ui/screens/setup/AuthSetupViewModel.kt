@@ -14,6 +14,7 @@ enum class SetupStep {
     SELECT_METHOD,
     CREATE_CREDENTIAL,
     CONFIRM_CREDENTIAL,
+    SECURITY_QUESTION,
     BIOMETRIC_OPTION
 }
 
@@ -22,12 +23,22 @@ data class AuthSetupUiState(
     val selectedMethod: AuthMethod = AuthMethod.PIN,
     val initialCredential: String = "",
     val confirmCredential: String = "",
+    val selectedQuestion: String = "What was the name of your first pet?",
+    val securityAnswer: String = "",
     val errorMessage: String? = null,
     val isComplete: Boolean = false
 )
 
 class AuthSetupViewModel(application: Application) : AndroidViewModel(application) {
     private val prefsManager = (application as SecureLockApp).preferencesManager
+
+    val availableQuestions = listOf(
+        "What was the name of your first pet?",
+        "In what city or town were you born?",
+        "What was your childhood nickname?",
+        "What was the make of your first phone or car?",
+        "What was the name of your elementary school?"
+    )
 
     private val _uiState = MutableStateFlow(AuthSetupUiState())
     val uiState: StateFlow<AuthSetupUiState> = _uiState.asStateFlow()
@@ -43,7 +54,6 @@ class AuthSetupViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onInitialCredentialEntered(credential: String) {
-        // Validate credential format
         val error = validateCredentialFormat(_uiState.value.selectedMethod, credential)
         if (error != null) {
             _uiState.value = _uiState.value.copy(errorMessage = error)
@@ -58,7 +68,7 @@ class AuthSetupViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    fun onConfirmCredentialEntered(credential: String, onAdvanceToBiometrics: () -> Unit) {
+    fun onConfirmCredentialEntered(credential: String) {
         if (credential != _uiState.value.initialCredential) {
             _uiState.value = _uiState.value.copy(
                 errorMessage = "Credentials do not match. Please try again.",
@@ -67,9 +77,34 @@ class AuthSetupViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
 
-        // Credentials match! Save to DataStore with cryptographic salt + PBKDF2 hash
+        // Advance to Security Question step
+        _uiState.value = _uiState.value.copy(
+            currentStep = SetupStep.SECURITY_QUESTION,
+            errorMessage = null
+        )
+    }
+
+    fun onSelectSecurityQuestion(question: String) {
+        _uiState.value = _uiState.value.copy(selectedQuestion = question)
+    }
+
+    fun onSecurityAnswerChanged(answer: String) {
+        _uiState.value = _uiState.value.copy(securityAnswer = answer, errorMessage = null)
+    }
+
+    fun onSaveSecurityQuestionAndCredential(onAdvanceToBiometrics: () -> Unit) {
+        val answer = _uiState.value.securityAnswer.trim()
+        if (answer.length < 2) {
+            _uiState.value = _uiState.value.copy(errorMessage = "Security answer must be at least 2 characters")
+            return
+        }
+
         viewModelScope.launch {
-            prefsManager.saveCredential(_uiState.value.selectedMethod, credential)
+            // 1. Save master credential
+            prefsManager.saveCredential(_uiState.value.selectedMethod, _uiState.value.initialCredential)
+            // 2. Save security question & PBKDF2 hashed answer
+            prefsManager.saveSecurityQuestion(_uiState.value.selectedQuestion, answer)
+
             _uiState.value = _uiState.value.copy(
                 currentStep = SetupStep.BIOMETRIC_OPTION,
                 errorMessage = null
@@ -95,8 +130,14 @@ class AuthSetupViewModel(application: Application) : AndroidViewModel(applicatio
                     errorMessage = null
                 )
             }
+            SetupStep.SECURITY_QUESTION -> {
+                _uiState.value = _uiState.value.copy(
+                    currentStep = SetupStep.CONFIRM_CREDENTIAL,
+                    errorMessage = null
+                )
+            }
             SetupStep.BIOMETRIC_OPTION -> {
-                _uiState.value = _uiState.value.copy(currentStep = SetupStep.CONFIRM_CREDENTIAL)
+                _uiState.value = _uiState.value.copy(currentStep = SetupStep.SECURITY_QUESTION)
             }
         }
     }

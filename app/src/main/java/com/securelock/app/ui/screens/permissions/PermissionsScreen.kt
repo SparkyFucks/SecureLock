@@ -1,5 +1,8 @@
 package com.securelock.app.ui.screens.permissions
 
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,6 +74,13 @@ fun PermissionsScreen(
     var hasNotification by remember { mutableStateOf(PermissionManager.hasNotificationPermission(context)) }
     var isIgnoringBattery by remember { mutableStateOf(PermissionManager.isIgnoringBatteryOptimizations(context)) }
 
+    // Native Notification Permission Launcher for Android 13+ (API 33+)
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotification = isGranted
+    }
+
     // Re-check permissions when returning from system settings
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -90,7 +100,7 @@ fun PermissionsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Required Permissions", style = MaterialTheme.typography.titleLarge) },
+                title = { Text("Permissions & Compatibility", style = MaterialTheme.typography.titleLarge) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
@@ -113,6 +123,22 @@ fun PermissionsScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Android OS version badge
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = "Running on Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
             Text(
                 text = "SecureLock needs explicit Android system permissions to reliably detect protected apps and present the lock screen.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -146,7 +172,13 @@ fun PermissionsScreen(
                 icon = Icons.Outlined.Notifications,
                 isGranted = hasNotification,
                 isRequired = false,
-                onGrantClick = { PermissionManager.openAppSettings(context) }
+                onGrantClick = {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        notificationLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        PermissionManager.openAppSettings(context)
+                    }
+                }
             )
 
             // 4. Battery Optimization

@@ -98,18 +98,26 @@ fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Outlined.Shield,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(26.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Outlined.Shield,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "SecureLock",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            )
+                        }
                         Text(
-                            text = "SecureLock",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp
+                            text = "powered by SparkyLabs",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            modifier = Modifier.padding(start = 32.dp)
                         )
                     }
                 },
@@ -187,6 +195,19 @@ fun HomeScreen(
                 icon = Icons.Outlined.BatterySaver,
                 onClick = onNavigateToOemGuide
             )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "powered by SparkyLabs",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+            }
 
             Spacer(modifier = Modifier.height(16.dp))
         }

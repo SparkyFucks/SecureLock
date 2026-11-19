@@ -25,13 +25,18 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Password
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -53,7 +58,6 @@ import com.securelock.app.domain.model.AuthMethod
 import com.securelock.app.ui.screens.setup.components.PasswordInputView
 import com.securelock.app.ui.screens.setup.components.PatternLockView
 import com.securelock.app.ui.screens.setup.components.PinInputView
-import com.securelock.app.ui.theme.StatusError
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +77,7 @@ fun AuthSetupScreen(
                             SetupStep.SELECT_METHOD -> "Choose Lock Method"
                             SetupStep.CREATE_CREDENTIAL -> "Create ${state.selectedMethod.title}"
                             SetupStep.CONFIRM_CREDENTIAL -> "Confirm ${state.selectedMethod.title}"
+                            SetupStep.SECURITY_QUESTION -> "Recovery Question"
                             SetupStep.BIOMETRIC_OPTION -> "Biometric Security"
                         },
                         style = MaterialTheme.typography.titleLarge
@@ -145,11 +150,20 @@ fun AuthSetupScreen(
                     SetupStep.CONFIRM_CREDENTIAL -> {
                         ConfirmCredentialStep(
                             method = state.selectedMethod,
-                            onComplete = { cred -> viewModel.onConfirmCredentialEntered(cred, onAdvanceToBiometrics) }
+                            onComplete = { cred -> viewModel.onConfirmCredentialEntered(cred) }
+                        )
+                    }
+                    SetupStep.SECURITY_QUESTION -> {
+                        SecurityQuestionStep(
+                            questions = viewModel.availableQuestions,
+                            selectedQuestion = state.selectedQuestion,
+                            answer = state.securityAnswer,
+                            onSelectQuestion = { viewModel.onSelectSecurityQuestion(it) },
+                            onAnswerChange = { viewModel.onSecurityAnswerChanged(it) },
+                            onContinue = { viewModel.onSaveSecurityQuestionAndCredential(onAdvanceToBiometrics) }
                         )
                     }
                     SetupStep.BIOMETRIC_OPTION -> {
-                        // Handled by separate destination or inline
                         Box(modifier = Modifier.fillMaxSize())
                     }
                 }
@@ -376,7 +390,7 @@ private fun ConfirmCredentialStep(
                     enabled = passwordString.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Confirm & Save")
+                    Text("Confirm")
                 }
             }
             AuthMethod.PATTERN -> {
@@ -386,6 +400,87 @@ private fun ConfirmCredentialStep(
                     }
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SecurityQuestionStep(
+    questions: List<String>,
+    selectedQuestion: String,
+    answer: String,
+    onSelectQuestion: (String) -> Unit,
+    onAnswerChange: (String) -> Unit,
+    onContinue: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text(
+            text = "Set a security question to recover access if you ever forget your master PIN, password, or pattern.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = !expanded }
+        ) {
+            OutlinedTextField(
+                value = selectedQuestion,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Choose a Security Question") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier
+                    .menuAnchor()
+                    .fillMaxWidth()
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                questions.forEach { q ->
+                    DropdownMenuItem(
+                        text = { Text(q) },
+                        onClick = {
+                            onSelectQuestion(q)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        OutlinedTextField(
+            value = answer,
+            onValueChange = onAnswerChange,
+            label = { Text("Your Secret Answer") },
+            placeholder = { Text("e.g. Bruno, Chicago, Sparky") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Text(
+            text = "Your answer is cryptographically hashed with PBKDF2 and never stored in plaintext.",
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onContinue,
+            enabled = answer.trim().length >= 2,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Save & Continue")
         }
     }
 }

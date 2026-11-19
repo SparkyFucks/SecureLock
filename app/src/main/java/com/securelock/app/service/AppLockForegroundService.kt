@@ -171,14 +171,44 @@ class AppLockForegroundService : Service() {
     }
 
     private fun launchLockOverlay(targetPackage: String) {
-        val intent = Intent(this, LockScreenActivity::class.java).apply {
-            putExtra(LockScreenActivity.EXTRA_PACKAGE_NAME, targetPackage)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        try {
+            val intent = Intent(this, LockScreenActivity::class.java).apply {
+                putExtra(LockScreenActivity.EXTRA_PACKAGE_NAME, targetPackage)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            // Android 14+ OEM background start resilience: full-screen intent
+            triggerFullScreenIntentFallback(targetPackage)
         }
-        startActivity(intent)
+    }
+
+    private fun triggerFullScreenIntentFallback(targetPackage: String) {
+        val lockIntent = Intent(this, LockScreenActivity::class.java).apply {
+            putExtra(LockScreenActivity.EXTRA_PACKAGE_NAME, targetPackage)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            targetPackage.hashCode(),
+            lockIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("App Locked")
+            .setContentText("Tap to unlock application")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setFullScreenIntent(pendingIntent, true)
+            .setAutoCancel(true)
+            .build()
+        val manager = getSystemService(NotificationManager::class.java)
+        manager?.notify(2001, notification)
     }
 
     private fun getLauncherPackageNames(): Set<String> {

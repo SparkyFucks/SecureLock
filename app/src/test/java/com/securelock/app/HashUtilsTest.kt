@@ -61,4 +61,21 @@ class HashUtilsTest {
         assertTrue(HashUtils.verifyCredential("0-1-2-5-8", salt, hash))
         assertFalse(HashUtils.verifyCredential("0-1-2-4-8", salt, hash))
     }
+
+    @Test
+    fun securityAnswer_verifiesCaseInsensitiveAndTrimmed() {
+        val answer = "Bruno"
+        val normalized = answer.trim().lowercase()
+        val salt = HashUtils.generateSalt()
+        val hash = HashUtils.hashCredential(normalized, salt)
+
+        // User enters "bruno" or " BRUNO  "
+        val candidate1 = "bruno".trim().lowercase()
+        val candidate2 = " BRUNO  ".trim().lowercase()
+        val wrongCandidate = "Fluffy".trim().lowercase()
+
+        assertTrue(HashUtils.verifyCredential(candidate1, salt, hash))
+        assertTrue(HashUtils.verifyCredential(candidate2, salt, hash))
+        assertFalse(HashUtils.verifyCredential(wrongCandidate, salt, hash))
+    }
 }
